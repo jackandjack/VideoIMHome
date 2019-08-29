@@ -1,31 +1,29 @@
 package controllers
 
 import (
-	"VideoProject/models"
 	"github.com/astaxie/beego"
 )
 
 type UserController struct {
-
 	beego.Controller
-
 }
 
+func (this *UserController) Login() {
+	resp := make(map[string]interface{})
+	defer this.RetData(resp)
+	username := this.GetString("username")
+	password := this.GetString("password")
+	if len(username) == 0 {
+		//提示账号错误
 
-func (u *UserController) Login(){
-	var user models.User
-	username := u.GetString("username")
-	password := u.GetString("password")
-    suess :=models.Login(user,username,password)
-	if suess {
-		u.Data["json"] = "login success"
-	}else{
-		u.Data["json"] = "user not exist"
 	}
-	u.ServeJSON()
-
+	if len(password) == 0 {
+		//提示密码错误
+	}
+	this.RetData(resp)
 }
 
-
-
-
+func (this *UserController) RetData(resp map[string]interface{}) {
+	this.Data["json"] = resp
+	this.ServeJSON()
+}
