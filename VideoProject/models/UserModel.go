@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
+	_ "github.com/dgrijalva/jwt-go/request"
 	_ "github.com/go-sql-driver/mysql" //import your used driver
 )
 
@@ -19,7 +20,6 @@ func init() {
 	// create table
 	orm.RunSyncdb("default", false, true)
 	//初始化数据库
-	db, _ := orm.NewQueryBuilder("mysql")
 	//输出数据库日记
 	orm.Debug = true
 	fmt.Sprintln("db", db)
@@ -27,9 +27,9 @@ func init() {
 
 /*添加用户接口*/
 func AddUser(user User) bool {
-	db.InsertInto("user")
-	mysql := db.String()
-	err := orm.NewOrm().Raw(mysql).QueryRow(&user)
+
+	id, err := orm.NewOrm().Insert(&user)
+	fmt.Println("id", id)
 	if err == nil {
 		beego.Error("插入user失败")
 		return false
@@ -42,6 +42,7 @@ func AddUser(user User) bool {
 /*修改个人资料*/
 func UpdateUser(user User, newvalue string, oldvalue string, key string) bool {
 
+	db, _ := orm.NewQueryBuilder("mysql")
 	db.Update("user").Set(fmt.Sprintf("%s", newvalue)).Where(fmt.Sprintf("%s='%s'", key, oldvalue))
 	mysql := db.String()
 	err := orm.NewOrm().Raw(mysql).QueryRow(&user)
@@ -52,10 +53,17 @@ func UpdateUser(user User, newvalue string, oldvalue string, key string) bool {
 		beego.Info("更新User成功")
 		return true
 	}
+
+}
+
+func Regist(user User, username string, password string) {
+
 }
 
 /*登录接口*/
 func Login(user User, number string, password string) bool {
+
+	db, _ := orm.NewQueryBuilder("mysql")
 	db.From("user").Where(fmt.Sprintf("Number='%s'", number)).Where(fmt.Sprintf("Password='%s'", password))
 	mysql := db.String()
 	err := orm.NewOrm().Raw(mysql).QueryRow(&user)
@@ -69,33 +77,42 @@ func Login(user User, number string, password string) bool {
 }
 
 /*根据Token 获取用户信息*/
-func Queryall(user User) (User, bool) {
-	db.From("user").Where(fmt.Sprintf("Token='%s'", user.Token))
+func Queryall(user *User) (*User, bool) {
+
+	var users []*User
+	db, _ := orm.NewQueryBuilder("mysql")
+	db.Select("*").From("user").Where(fmt.Sprintf("username='%s'", user.Username)).And(fmt.Sprintf("Password='%s'", user.Password))
 	mysql := db.String()
-	err := orm.NewOrm().Raw(mysql).QueryRow(&user)
-	if err == nil {
-		beego.Error("登录失败")
-		return user, false
-	} else {
-		beego.Info("登录成功")
-		return user, true
+	userCount, err := orm.NewOrm().Raw(mysql).QueryRows(&users)
+	fmt.Println("count=", userCount)
+	for _, u := range users {
+		if user.Username == u.Username {
+			user = u
+			fmt.Println("username=", user.Username)
+		}
 	}
+	if (err == nil) && (int(userCount) > 0) {
+		return user, true
+	} else {
+		return user, false
+	}
+
 }
 
 type User struct {
 	Id           int
-	Nickname     string
-	Username     string
-	Password     string
-	Number       string
-	Introduction string
-	SchoolNum    string
-	Sex          string
-	Birthday     string
-	Region       string
-	Token        string
-	Praise       string
-	Focus        string
-	fans         string
-	Icon         string
+	Nickname     string `orm:"size(100)""`
+	Username     string `orm:"size(100)"`
+	Password     string `orm:"size(100)"`
+	Number       string `orm:"size(100)"`
+	Introduction string `orm:"size(100)"`
+	SchoolNum    string `orm:"size(100)"`
+	Sex          int64  `orm:"default(1)"`
+	Birthday     string `orm:"size(100)"`
+	Region       string `orm:"size(100)"`
+	Token        string `orm:"token"`
+	Praise       int    `orm:"default(1)"`
+	Focus        int    `orm:"default(1)"`
+	fans         int    `orm:"default(1)"`
+	Icon         string `orm:"default(http://hk-pipixie.oss-cn-hongkong.aliyuncs.com/1564975612_4.png)"`
 }
