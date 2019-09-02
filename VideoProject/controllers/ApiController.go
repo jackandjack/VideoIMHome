@@ -6,83 +6,131 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego"
-	"github.com/dgrijalva/jwt-go"
+	_ "github.com/dgrijalva/jwt-go/request"
 	"time"
+	_ "time"
 )
 
 const (
 	SecretKey = "VideoProgress_2016"
 )
 
-type UserController struct {
+func Validate(isLogin bool, this *RegisteUserController, c *LoginUserController) bool {
+	if !isLogin {
+		phone := this.GetString("phone")
+		sendType := this.GetString("sendType")
+		resp := make(map[string]interface{})
+		if len(phone) == 0 {
+			resp["code"] = 1002
+			resp["data"] = ""
+			resp["msg"] = "请输入电话号码"
+			resp["info_code"] = 1002
+			this.RetData(resp)
+			return false
+		}
+		if len(sendType) == 0 {
+			resp["code"] = 1003
+			resp["data"] = ""
+			resp["msg"] = "没有的类型"
+			resp["info_code"] = 1003
+			this.RetData(resp)
+			return false
+		}
+		return true
+	} else {
+		phone := c.GetString("phone")
+		resp := make(map[string]interface{})
+		if len(phone) == 0 {
+			resp["code"] = 1002
+			resp["data"] = ""
+			resp["msg"] = "请输入电话号码"
+			resp["info_code"] = 1002
+			c.RetData(resp)
+			return false
+		}
+	}
+	return true
+}
+
+type RegisteUserController struct {
 	beego.Controller
 }
 
-func (this *UserController) Regist() {
-
-	username := this.GetString("username")
-
-	password := this.GetString("password")
-
+type LoginUserController struct {
+	beego.Controller
 }
 
-func GetToken() string {
-	token := jwt.New(jwt.SigningMethodHS256)
-	claims := make(jwt.MapClaims)
-	claims["exp"] = time.Now().Add(time.Hour * time.Duration(1)).Unix()
-	claims["iat"] = time.Now().Unix()
-	token.Claims = claims
-	tokenString, _ := token.SignedString([]byte(SecretKey))
-	fmt.Println("Token=", tokenString)
-	return tokenString
+func (this *RegisteUserController) Registe() {
+	resp := make(map[string]interface{})
+	user := models.User{}
+	user.Phone = this.GetString("phone")
+	user.Type = this.GetString("sendType")
+	if Validate(false, this, nil) {
+		_, isSuces := models.Regist(user)
+		if isSuces {
+			resp["code"] = 1000
+			//str, _ := json.Marshal(usernew)
+			resp["data"] = ""
+			resp["msg"] = "注册成功"
+			resp["info_code"] = 1000
+		} else {
+			resp["code"] = 1001
+			//str, _ := json.Marshal(usernew)
+			resp["data"] = ""
+			resp["msg"] = "注册失败"
+			resp["info_code"] = 1001
+		}
+	}
+	this.RetData(resp)
 }
-
-func (this *UserController) Login() {
-
+func (this *LoginUserController) Login() {
 	user := models.User{}
 	resp := make(map[string]interface{})
 	defer this.RetData(resp)
-	username := this.GetString("username")
-	password := this.GetString("password")
-	if len(username) == 0 {
-		//提示账号错误
-		resp["errno"] = 10001
-		resp["errmsg"] = "请输入用户名"
+	user.Phone = this.GetString("phone")
+	codeStr := this.GetString("code")
+	if len(codeStr) == 0 {
+		resp["code"] = 1005
+		resp["data"] = ""
+		resp["msg"] = "请输入手机验证码"
+		resp["info_code"] = 1005
 		this.RetData(resp)
 		return
 	}
-	if len(password) == 0 {
-		//提示密码错误
-		resp["errno"] = 10002
-		resp["errmsg"] = "请输入用户密码"
-		this.RetData(resp)
-		return
-	}
-	user.Username = username
-	user.Password = password
-	newuser, suess := models.Queryall(&user)
-	if suess {
-		resp["errno"] = 10000
-		str, _ := json.Marshal(newuser)
-		fmt.Printf("%s\n", str)
-		resp["data"] = fmt.Sprintf("%s", str)
-		resp["errmsg"] = "登录成功"
-	} else {
-		issuess := models.AddUser(user)
-		if issuess {
-			resp["errno"] = 10000
-			dataJ, _ := json.Marshal(newuser)
-			resp["data"] = dataJ
-			resp["errmsg"] = "登录成功"
+	if Validate(true, nil, this) {
+		newuser, sucess := models.Findphone(user.Phone)
+		if sucess {
+			resp["code"] = 1000
+			str, _ := json.Marshal(newuser)
+			resp["data"] = fmt.Sprintf("%s", str)
+			resp["msg"] = "登录成功"
+			resp["info_code"] = 1000
+			//更新时间戳
+			t := time.Now()
+			fmt.Println(t)
+			t1 := t.Unix()
+			times := fmt.Sprintf("%d", t1)
+			isSucess := models.UpdateUser(newuser, "logintime", times, newuser.Phone)
+			if isSucess {
+				fmt.Println("更新成功")
+			} else {
+				fmt.Println("更新失败")
+			}
 		} else {
-			resp["errno"] = 10004
-			resp["errmsg"] = "登录失败"
+			resp["code"] = 1006
+			resp["msg"] = "登录失败"
+			resp["data"] = ""
+			resp["info_code"] = 1006
 		}
 	}
 	this.RetData(resp)
 }
 
-func (this *UserController) RetData(resp map[string]interface{}) {
+func (this *RegisteUserController) RetData(resp map[string]interface{}) {
+	this.Data["json"] = resp
+	this.ServeJSON()
+}
+func (this *LoginUserController) RetData(resp map[string]interface{}) {
 	this.Data["json"] = resp
 	this.ServeJSON()
 }
