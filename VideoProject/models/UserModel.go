@@ -45,7 +45,7 @@ func AddUser(user User) (int64, bool) {
 /*修改个人资料*/
 func UpdateUser(user User, key string, value string, phone string) bool {
 	db, _ := orm.NewQueryBuilder("mysql")
-	db.Update("user").Set(key).Values(value).Where(fmt.Sprintf("phone='%s'", phone))
+	db.Update("user").Set(fmt.Sprintf("%s='%s'", key, value)).Where(fmt.Sprintf("phone='%s'", phone))
 	mysql := db.String()
 	err := orm.NewOrm().Raw(mysql).QueryRow(&user)
 	if err == nil {
