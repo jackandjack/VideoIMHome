@@ -7,8 +7,20 @@ import (
 	"fmt"
 	"github.com/astaxie/beego"
 	_ "github.com/dgrijalva/jwt-go/request"
+	"strconv"
 	"time"
 	_ "time"
+)
+
+type OprationType int32
+
+const (
+	OprationTypeIcon         OprationType = 0
+	OprationTypeNickName     OprationType = 1
+	OprationTypePwd          OprationType = 2
+	OprationTypeSex          OprationType = 3
+	OprationTypeIntroduction OprationType = 4
+	OprationTypeBirthday     OprationType = 5
 )
 
 const (
@@ -58,6 +70,82 @@ type RegisteUserController struct {
 
 type LoginUserController struct {
 	beego.Controller
+}
+
+type UpdateUserController struct {
+	beego.Controller
+}
+
+func check(optype OprationType, token string, text string, this *UpdateUserController) bool {
+
+	resp := make(map[string]interface{})
+	//判断操作是否存在
+	if optype != OprationTypeNickName && optype != OprationTypeIcon && optype != OprationTypeBirthday && optype != OprationTypeIntroduction && optype != OprationTypeSex && optype != OprationTypePwd {
+		resp["code"] = 1101
+		resp["data"] = ""
+		resp["msg"] = "该操作不存在"
+		resp["info_code"] = 1101
+		this.RetData(resp)
+		return false
+	}
+	//判断Token 是否存在
+	if models.CheckToken(token) == false {
+		resp["code"] = 1111
+		resp["data"] = ""
+		resp["msg"] = "Token失效"
+		resp["info_code"] = 1111
+		this.RetData(resp)
+		return false
+	}
+	//判断文本是否未空
+	if len(text) == 0 {
+		resp["code"] = 1102
+		resp["data"] = ""
+		resp["msg"] = "文本不能为空"
+		resp["info_code"] = 1102
+		this.RetData(resp)
+		return false
+	}
+	return true
+}
+
+func (this *UpdateUserController) Update() {
+	resp := make(map[string]interface{})
+	optype, _ := strconv.Atoi(this.GetString("type"))
+	token := this.GetString("token")
+	text := this.GetString("text")
+	if check(OprationType(optype), token, text, this) == false {
+		return
+	}
+	if changeUserDate(OprationType(optype), token, text) {
+		resp["code"] = 1000
+		resp["data"] = ""
+		resp["msg"] = "更新成功"
+		resp["info_code"] = 1000
+	} else {
+		resp["code"] = 1100
+		resp["data"] = ""
+		resp["msg"] = "更新失败"
+		resp["info_code"] = 1100
+	}
+	this.RetData(resp)
+}
+
+func changeUserDate(op OprationType, token string, text string) bool {
+	user := models.User{}
+	switch op {
+	case OprationTypeIcon:
+		return models.UpdateUser(user, "Icon", text, token, "token")
+	case OprationTypeNickName:
+		return models.UpdateUser(user, "nickname", text, token, "token")
+	case OprationTypeSex:
+		return models.UpdateUser(user, "sex", text, token, "token")
+	case OprationTypeIntroduction:
+		return models.UpdateUser(user, "introduction", text, token, "token")
+	case OprationTypeBirthday:
+		return models.UpdateUser(user, "birthday", text, token, "token")
+	}
+	return false
 }
 
 func (this *RegisteUserController) Registe() {
@@ -110,7 +198,8 @@ func (this *LoginUserController) Login() {
 			fmt.Println(t)
 			t1 := t.Unix()
 			times := fmt.Sprintf("%d", t1)
-			isSucess := models.UpdateUser(newuser, "logintime", times, newuser.Phone)
+			isSucess := models.UpdateUser(newuser, "Token", times, newuser.Phone, "phone")
+			models.UpdateUser(newuser, "Token", models.GetToken(user.Phone), newuser.Phone, "phone")
 			if isSucess {
 				fmt.Println("更新成功")
 			} else {
@@ -124,6 +213,10 @@ func (this *LoginUserController) Login() {
 		}
 	}
 	this.RetData(resp)
+}
+func (this *UpdateUserController) RetData(resp map[string]interface{}) {
+	this.Data["json"] = resp
+	this.ServeJSON()
 }
 
 func (this *RegisteUserController) RetData(resp map[string]interface{}) {

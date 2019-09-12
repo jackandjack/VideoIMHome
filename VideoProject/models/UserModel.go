@@ -42,10 +42,10 @@ func AddUser(user User) (int64, bool) {
 	}
 }
 
-/*修改个人资料*/
-func UpdateUser(user User, key string, value string, phone string) bool {
+/*根基电话人资料*/
+func UpdateUser(user User, key string, value string, findValue string, findkey string) bool {
 	db, _ := orm.NewQueryBuilder("mysql")
-	db.Update("user").Set(fmt.Sprintf("%s='%s'", key, value)).Where(fmt.Sprintf("phone='%s'", phone))
+	db.Update("user").Set(fmt.Sprintf("%s='%s'", key, value)).Where(fmt.Sprintf("%s='%s'", findkey, findValue))
 	mysql := db.String()
 	err := orm.NewOrm().Raw(mysql).QueryRow(&user)
 	if err == nil {
@@ -54,22 +54,46 @@ func UpdateUser(user User, key string, value string, phone string) bool {
 		return true
 	}
 }
-func GetToken() string {
+func GetToken(tel string) string {
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := make(jwt.MapClaims)
 	claims["exp"] = time.Now().Add(time.Hour * time.Duration(1)).Unix()
-	claims["iat"] = time.Now().Unix()
+	claims["time"] = time.Now().Unix() //该方法进行token 的限制
+	claims["SecretKey"] = SecretKey
+	claims["tel"] = tel
 	token.Claims = claims
 	tokenString, _ := token.SignedString([]byte(SecretKey))
 	fmt.Println("Token=", tokenString)
 	return tokenString
+}
+func TokenPara(tokenSrt string, SecretKey []byte) (claims jwt.Claims, err error) {
+	var token *jwt.Token
+	token, err = jwt.Parse(tokenSrt, func(token *jwt.Token) (interface{}, error) {
+		return SecretKey, nil
+	})
+	claims = token.Claims
+	return claims, err
+}
+func CheckToken(token string) bool {
+	var clain jwt.Claims
+	clain, err := TokenPara(token, []byte(SecretKey))
+	if nil != err {
+		fmt.Println(" err :", err)
+	}
+	fmt.Println("claims:", clain)
+	fmt.Println("claims SecretKey:", clain.(jwt.MapClaims)["SecretKey"])
+	if clain.(jwt.MapClaims)["SecretKey"] == SecretKey {
+		return true
+	} else {
+		return false
+	}
 }
 func Regist(user User) (User, bool) {
 	t := time.Now()
 	fmt.Println(t)
 	t1 := t.Unix()
 	var times = fmt.Sprintf("%d", t1)
-	user.Token = GetToken()
+	user.Token = GetToken(user.Phone)
 	user.Lasttime = times
 	user.Logintime = times
 	user.Introduction = "这个人很懒,什么都没有写"
