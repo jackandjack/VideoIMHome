@@ -16,7 +16,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"net"
 	"os"
-	"runtime"
 )
 
 var (
@@ -26,8 +25,8 @@ var (
 )
 
 func init() {
-	fmt.Println("CPU个数: ", runtime.NumCPU())
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	//fmt.Println("CPU个数: ", runtime.NumCPU())
+	//runtime.GOMAXPROCS(runtime.NumCPU())
 	//fmt.Println(os.Args[0])
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", "127.0.0.1:8083")
 	checkError(err)
@@ -69,7 +68,7 @@ func handleClient(conn net.Conn, index int) {
 Out:
 	for {
 		if !isHeadLoaded {
-			headLenSl := make([]byte, 2480)
+			headLenSl := make([]byte, 1024*1024)
 			//已经读取的包头字节数
 			Buflen, err := reader.Read(headLenSl)
 			if err != nil {
@@ -81,12 +80,13 @@ Out:
 			}
 			msgH := HeadMsg{}
 			//取前20 获取Head 数据包
-			newbuf := bytes.NewBuffer([]byte(string(headLenSl[:20])))
+			newbuf := bytes.NewBuffer([]byte(string(headLenSl[0:20])))
 			binary.Read(newbuf, binary.BigEndian, &msgH)
-			fmt.Println("cmdid: ", msgH.CmdId)
-			sendMsgToAll(headLenSl[:20])
+
 			if msgH.CmdId != 6 {
 				isHeadLoaded = true
+			} else {
+				sendMsgToAll(headLenSl[:20])
 			}
 			if isHeadLoaded {
 				if Buflen != int(20+msgH.BodyLength) {
@@ -98,41 +98,61 @@ Out:
 				proto.Unmarshal([]byte(string(headLenSl[20:Buflen])), bodyPro)
 				fmt.Println("send user=", bodyPro.User)
 				resBody := &models.HelloResponse{
-					Retcode: 1000,
-					Errmsg:  "发送成功",
+					Retcode: proto.Int32(1000),
+					Errmsg:  proto.String("发送成功"),
 				}
 				data, _ := proto.Marshal(resBody)
-				databuf := bytes.NewBuffer(data)
-
-				newmsgH := &HeadMsg{
-					HeadLength:    20,
-					ClientVersion: 200,
-					CmdId:         msgH.CmdId,
-					Seq:           msgH.Seq,
-					BodyLength:    uint32(databuf.Len()),
+				msgH.BodyLength = uint32(len(data))
+				var sendBufer = bytes.NewBuffer([]byte{})
+				sendBufer.Reset()
+				sendBufer.Write(Unpack(&msgH))
+				sendBufer.Write(data)
+				n, senderr := conn.Write(sendBufer.Bytes())
+				if senderr != nil {
+					fmt.Println("发送失败")
+				} else {
+					fmt.Println("发送字节长度n=", n)
 				}
-				var bufferhead = make([]byte, 20)
-				dateBuffer := bytes.NewBuffer(bufferhead)
-				err := binary.Write(dateBuffer, binary.BigEndian, newmsgH)
-				if err != nil {
-					panic(err)
-				}
-				conn.Write(BytesCombine(dateBuffer.Bytes(), data))
 				isHeadLoaded = false
 			}
 		}
 	}
 }
 
-func BytesCombine(pBytes ...[]byte) []byte {
-	len := len(pBytes)
-	s := make([][]byte, len)
-	for index := 0; index < len; index++ {
-		s[index] = pBytes[index]
-	}
-	sep := []byte("")
-	return bytes.Join(s, sep)
+//整型转换为字节
+func IntToBytes(n int) []byte {
+	data := int32(n)
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	//将data参数里面包含的数据写入到bytesBuffer中
+	binary.Write(bytesBuffer, binary.BigEndian, data)
+
+	return bytesBuffer.Bytes()
 }
+
+func Unpack(msg *HeadMsg) []byte {
+
+	databufio := bytes.NewBuffer([]byte{})
+
+	binary.Write(databufio, binary.BigEndian, msg.HeadLength)
+
+	binary.Write(databufio, binary.BigEndian, msg.ClientVersion)
+
+	binary.Write(databufio, binary.BigEndian, msg.CmdId)
+
+	binary.Write(databufio, binary.BigEndian, msg.Seq)
+
+	binary.Write(databufio, binary.BigEndian, msg.BodyLength)
+
+	return databufio.Bytes()
+}
+
+//func ReciveMsg(msg []byte) proto.Message {
+//
+//
+//	return proto.Message;
+//
+//}
+
 func sendMsgToAll(msg []byte) {
 	for _, value := range ClientMap {
 		writer := bufio.NewWriter(value)
@@ -151,14 +171,9 @@ type HeadMsg struct {
 	BodyLength    uint32
 }
 
-func parseData(data []byte) {
-
-}
-
 func checkError(err error) {
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
-
 }
